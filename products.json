@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-05T23:30:07.661Z",
+  "updatedAt": "2026-11-08T20:15:05.227Z",
   "source": "ghl",
   "schemaKey": "custom_objects.voyages",
   "locationId": "V90iyFBbBrCg3tpctRjc",
@@ -539,10 +539,10 @@
       "ownerId": "2k9aRsh2OkTdG7TnIiGo",
       "owner": {
         "id": "2k9aRsh2OkTdG7TnIiGo",
-        "name": "Yancie Auclair",
-        "email": "yancie@voyagefiesta.com",
-        "phone": "+14505012547",
-        "slug": "yancie-auclair"
+        "name": "2k9aRsh2OkTdG7TnIiGo",
+        "email": "",
+        "phone": "",
+        "slug": "2k9arsh2oktdg7tniigo"
       }
     },
     {
@@ -1470,10 +1470,10 @@
       "ownerId": "2k9aRsh2OkTdG7TnIiGo",
       "owner": {
         "id": "2k9aRsh2OkTdG7TnIiGo",
-        "name": "Yancie Auclair",
-        "email": "yancie@voyagefiesta.com",
-        "phone": "+14505012547",
-        "slug": "yancie-auclair"
+        "name": "2k9aRsh2OkTdG7TnIiGo",
+        "email": "",
+        "phone": "",
+        "slug": "2k9arsh2oktdg7tniigo"
       }
     },
     {

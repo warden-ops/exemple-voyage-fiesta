@@ -1,8 +1,15 @@
 {
-  "updatedAt": "2026-10-22T00:00:03.247Z",
+  "updatedAt": "2026-11-08T20:15:03.288Z",
   "source": "ghl",
   "locationId": "V90iyFBbBrCg3tpctRjc",
   "agents": [
+    {
+      "id": "2k9aRsh2OkTdG7TnIiGo",
+      "name": "2k9aRsh2OkTdG7TnIiGo",
+      "email": "",
+      "phone": "",
+      "slug": "2k9arsh2oktdg7tniigo"
+    },
     {
       "id": "M37kX9dOKDqiT8arwEJs",
       "name": "Agence Voyages Fiesta  et Mariage Sud",
@@ -16,13 +23,6 @@
       "email": "Barbara@voyagefiesta.com",
       "phone": "+18736712155",
       "slug": "barbara-delisle"
-    },
-    {
-      "id": "2k9aRsh2OkTdG7TnIiGo",
-      "name": "Yancie Auclair",
-      "email": "yancie@voyagefiesta.com",
-      "phone": "+14505012547",
-      "slug": "yancie-auclair"
     }
   ]
 }
