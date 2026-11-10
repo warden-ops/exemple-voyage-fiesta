@@ -78,6 +78,7 @@ jobs:
           server/atrium-sync/mirror-images.test.mjs
           server/atrium-sync/push-ghl.test.mjs
           groupes/js/catalog.test.mjs
+          groupes/js/open-search.test.mjs
           groupes/js/images.test.mjs
           groupes/js/endpoints.test.mjs
           tests/api-bases.test.mjs

@@ -1,3 +1,14 @@
+import {
+  copyLeadParams,
+  demandePayload,
+  isPublicText,
+  itineraryLines,
+  publicDate,
+  publicList,
+  readableServices,
+  shipYear,
+  visibleRates
+} from './fiche.mjs';
 import { catalogImage, nextFallback } from './images.mjs';
 import { plainText, richHtml } from './richtext.mjs';
 import { apiUrls, fetchFirst } from './endpoints.mjs';
@@ -17,6 +28,7 @@ import {
   buildCruiseSearchUrl,
   buildCarSearchUrl
 } from './catalog.mjs';
+import { openSearchResult } from './open-search.mjs';
 
 const root = new URL('../', import.meta.url);
 const params = new URLSearchParams(location.search);
@@ -70,9 +82,9 @@ function withFlags(url) {
   if (dryRun()) url.searchParams.set('dry_run', '1');
   if (params.get('api')) url.searchParams.set('api', params.get('api'));
   if (params.get('data')) url.searchParams.set('data', params.get('data'));
-  const agent = window.VFAgent?.current?.();
-  if (agent?.slug) url.searchParams.set('ref', agent.slug);
-  if (agent?.id) url.searchParams.set('ghl_user', agent.id);
+  const merged = copyLeadParams(url.searchParams, params, sharedAgent());
+  const next = new URLSearchParams(merged);
+  url.search = next.toString();
   return url;
 }
 
@@ -163,21 +175,25 @@ function imgTag(photo, alt, attrs = '') {
 
 function card(group) {
   const photo = catalogImage(group.image, { imageSource: group.imageSource, source: group.source });
-  const where = [group.country, group.destination].filter(Boolean).join(' · ');
+  const where = [group.country, group.destination].filter(isPublicText).join(' · ');
+  const detail = groupHref(group);
+  const reserve = `${detail}#form-fiche`;
   const media = photo.src
     ? imgTag(photo, group.title, ' loading="lazy" decoding="async"')
     : `<span class="card-fallback" aria-hidden="true"></span>`;
   const mediaLabel = photo.src ? '' : ` aria-label="${esc(group.title)}"`;
+  const when = publicDate(group.dateDepart);
   return `<article class="card">
-    <a class="card-media" href="${esc(groupHref(group))}"${mediaLabel}>${media}</a>
+    <a class="card-media" href="${esc(detail)}"${mediaLabel}>${media}</a>
     <div class="card-body">
       <p class="eyebrow">${esc(where || categoryLabel(group.type))}</p>
-      <h3><a href="${esc(groupHref(group))}">${esc(group.title)}</a></h3>
+      <h3><a href="${esc(detail)}">${esc(group.title)}</a></h3>
       <p class="muted">${esc(providerOf(group))}</p>
-      <p class="muted">${esc(formatDate(group.dateDepart))}</p>
+      ${when ? `<p class="muted">${esc(when)}</p>` : ''}
       <p>${priceLine(group)}</p>
       <div class="card-actions">
-        <button class="btn" type="button" data-demande="${esc(group.id)}">Demander de l'information</button>
+        <a class="btn-detail" href="${esc(detail)}" aria-label="Détails, ${esc(group.title)}">Détails</a>
+        <a class="btn-book" href="${esc(reserve)}" aria-label="Réserver ${esc(group.title)}">Réserver</a>
       </div>
     </div>
   </article>`;
@@ -245,48 +261,19 @@ function bindForm(form, group) {
       missing.focus();
       return;
     }
-    const parts = name.value.trim().split(/\s+/);
-    const payload = {
-      request_type: 'demande_groupe',
-      dry_run: dryRun() ? true : undefined,
-      groupe_id: String(group.id),
-      id_groupe: String(group.id),
-      groupe_titre: group.title,
-      groupe_type: group.type,
-      forfait_name: group.title,
-      nom_du_forfait: group.title,
-      destination: group.destination || '',
-      country: group.country || '',
-      departure_date: group.dateDepart || '',
-      duration_nights: group.dureeNuits != null ? String(group.dureeNuits) : '',
-      duration_label: [group.dureeJours ? `${group.dureeJours} jours` : '', group.dureeNuits ? `${group.dureeNuits} nuits` : ''].filter(Boolean).join(', '),
-      prix_appel: group.prixAppel != null ? String(group.prixAppel) : '',
-      hotel: group.hotel || '',
-      navire: group.navire || '',
-      compagnie: group.compagnie || '',
-      provider: providerOf(group),
-      groupe_url: new URL(groupHref(group), location.origin).href,
+    const payload = demandePayload(group, {
       full_name: name.value.trim(),
-      p1_prenom: parts[0] || '',
-      p1_nom: parts.slice(1).join(' '),
       email: email.value.trim(),
-      p1_email: email.value.trim(),
       phone: phone.value.trim(),
-      p1_phone: phone.value.trim(),
-      nombre_adultes: form.querySelector('[name="adults"]').value,
-      nombre_enfants: form.querySelector('[name="children"]').value,
+      adults: form.querySelector('[name="adults"]').value,
+      children: form.querySelector('[name="children"]').value,
       message: form.querySelector('[name="message"]').value.trim(),
-      terms_and_conditions: 'true'
-    };
-    const agent = sharedAgent();
-    if (agent) {
-      payload.agent_slug = agent.slug;
-      payload.agent_id = agent.id;
-      payload.conseiller_name = agent.name;
-      payload.conseiller_email = agent.email || '';
-      payload.conseiller_phone = agent.phone || '';
-    }
-    Object.keys(payload).forEach((key) => { if (payload[key] === undefined) delete payload[key]; });
+      provider: providerOf(group)
+    }, {
+      dryRun: dryRun(),
+      agent: sharedAgent(),
+      pageUrl: new URL(groupHref(group), location.origin).href
+    });
     const button = form.querySelector('[type="submit"]');
     button.disabled = true;
     status.dataset.kind = '';
@@ -315,14 +302,33 @@ function bindForm(form, group) {
   });
 }
 
-function options(list, placeholder) {
-  return [`<option value="">${esc(placeholder)}</option>`]
-    .concat((list || []).filter((item) => item.value).map((item) => `<option value="${esc(item.value)}">${esc(item.label)}</option>`))
-    .join('');
+function selectField(id, label, list, placeholder, extra = '') {
+  const named = extra && typeof extra === 'object';
+  const attrs = named ? '' : extra;
+  const selectedLabel = named ? extra.selectedLabel || '' : '';
+  const showPlaceholder = named ? extra.placeholder !== false : true;
+  const opts = (list || []).filter((item) => item.value).map((item) => {
+    const selected = selectedLabel && item.label === selectedLabel ? ' selected' : '';
+    return `<option value="${esc(item.value)}"${selected}>${esc(item.label)}</option>`;
+  }).join('');
+  const empty = showPlaceholder && placeholder ? `<option value="">${esc(placeholder)}</option>` : '';
+  return `<div class="field"><label for="${id}">${esc(label)}</label><select id="${id}" ${attrs}>${empty}${opts}</select></div>`;
 }
 
-function selectField(id, label, list, placeholder, extra = '') {
-  return `<div class="field"><label for="${id}">${esc(label)}</label><select id="${id}" ${extra}>${options(list, placeholder)}</select></div>`;
+function ico(name) {
+  const paths = {
+    sun: '<circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.6 5.6l1.5 1.5M16.9 16.9l1.5 1.5M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    plane: '<path d="M3.2 12.2l17.2-7.4-4.2 15.2-3.6-4.7-3.2 2.6.6-4.2-6.8-1.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>',
+    ship: '<path d="M4 15.5l1.6 4h12.8L20 15.5M5 15.5L12 6l7 9.5M12 6V3.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>',
+    car: '<path d="M4.5 14.5h15v3.2h-15zM6.2 14.5l1.4-3.8h8.8l1.4 3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/><circle cx="8" cy="17.7" r="1.1" fill="currentColor"/><circle cx="16" cy="17.7" r="1.1" fill="currentColor"/>',
+    search: '<circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.8 15.8L20.5 20.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    check: '<path d="M6 12.4l3.3 3.3L18 8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
+  };
+  return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[name] || ''}</svg>`;
+}
+
+function searchButton(label) {
+  return `<button class="btn btn-block" type="submit">${ico('search')}<span>${esc(label)}</span></button>`;
 }
 
 function comboField(id, label, list, placeholder) {
@@ -383,22 +389,22 @@ function searchCard(search) {
   const today = new Date().toISOString().slice(0, 10);
   return `<div class="search-card">
     <div class="tabs" role="tablist" aria-label="Recherche">
-      <button type="button" role="tab" id="tab-sud" aria-controls="panel-sud" aria-selected="true">Forfaits SUD</button>
-      <button type="button" role="tab" id="tab-vols" aria-controls="panel-vols" aria-selected="false">Vols</button>
-      <button type="button" role="tab" id="tab-cruise" aria-controls="panel-cruise" aria-selected="false">Croisières</button>
-      <button type="button" role="tab" id="tab-car" aria-controls="panel-car" aria-selected="false">Voitures</button>
+      <button type="button" role="tab" id="tab-sud" aria-controls="panel-sud" aria-selected="true">${ico('sun')}<span>Forfaits SUD</span></button>
+      <button type="button" role="tab" id="tab-vols" aria-controls="panel-vols" aria-selected="false">${ico('plane')}<span>Vols</span></button>
+      <button type="button" role="tab" id="tab-cruise" aria-controls="panel-cruise" aria-selected="false">${ico('ship')}<span>Croisières</span></button>
+      <button type="button" role="tab" id="tab-car" aria-controls="panel-car" aria-selected="false">${ico('car')}<span>Voitures</span></button>
     </div>
     <form id="panel-sud" data-search="sud" role="tabpanel" aria-labelledby="tab-sud">
       <div class="search-grid">
-        ${selectField('sud-gateway', 'Départ de', search.sud.gateways, 'Choisir')}
-        ${comboField('sud-dest', 'Destination', search.sud.destinations, 'Rechercher une destination')}
+        ${selectField('sud-gateway', 'Départ de', search.sud.gateways, '', { selectedLabel: 'Montréal' })}
+        ${selectField('sud-dest', 'Destination', search.sud.destinations, '', { selectedLabel: 'Tout Sud' })}
         <div class="field"><label for="sud-date">Date de départ</label><input id="sud-date" type="date" min="${today}"></div>
-        ${selectField('sud-duration', 'Durée', search.sud.durations, 'Choisir')}
+        ${selectField('sud-duration', 'Durée', search.sud.durations, '', { selectedLabel: '7 jours' })}
         <div class="field"><label for="sud-adults">Adulte(s)</label><select id="sud-adults">${[1,2,3,4,5,6,7,8].map((n) => `<option ${n===2?'selected':''}>${n}</option>`).join('')}</select></div>
         <div class="field"><label for="sud-children">Enfant(s)</label><select id="sud-children">${[0,1,2,3,4,5,6].map((n) => `<option>${n}</option>`).join('')}</select></div>
         <div class="field wide" id="sud-ages-wrap" hidden><label for="sud-ages">Âges des enfants</label><input id="sud-ages" placeholder="Ex. 8, 10"></div>
       </div>
-      <button class="btn btn-block" type="submit">Rechercher un forfait sud</button>
+      ${searchButton('Rechercher un forfait sud')}
     </form>
     <form id="panel-vols" data-search="vols" role="tabpanel" aria-labelledby="tab-vols" hidden>
       <div class="search-grid">
@@ -410,7 +416,7 @@ function searchCard(search) {
         <div class="field"><label for="vol-trip">Type de vol</label><select id="vol-trip"><option value="roundtrip">Aller-retour</option><option value="oneway">Aller simple</option></select></div>
         <div class="field"><label for="vol-adults">Adulte(s)</label><select id="vol-adults">${[1,2,3,4,5,6].map((n) => `<option ${n===2?'selected':''}>${n}</option>`).join('')}</select></div>
       </div>
-      <button class="btn btn-block" type="submit">Rechercher les vols</button>
+      ${searchButton('Rechercher les vols')}
     </form>
     <form id="panel-cruise" data-search="cruise" role="tabpanel" aria-labelledby="tab-cruise" hidden>
       <div class="search-grid">
@@ -420,7 +426,7 @@ function searchCard(search) {
         ${comboField('cruise-vendor', 'Croisiériste', search.croisieres.vendors, 'Tous les croisiéristes')}
         ${selectField('cruise-duration', 'Durée', search.croisieres.durations, 'Toutes les durées')}
       </div>
-      <button class="btn btn-block" type="submit">Rechercher une croisière</button>
+      ${searchButton('Rechercher une croisière')}
     </form>
     <form id="panel-car" data-search="car" role="tabpanel" aria-labelledby="tab-car" hidden>
       <div class="search-grid">
@@ -428,7 +434,7 @@ function searchCard(search) {
         <div class="field"><label for="car-from">Date de prise</label><input id="car-from" type="date" min="${today}" required></div>
         <div class="field"><label for="car-to">Date de retour</label><input id="car-to" type="date" min="${today}" required></div>
       </div>
-      <button class="btn btn-block" type="submit">Rechercher une voiture</button>
+      ${searchButton('Rechercher une voiture')}
     </form>
   </div>`;
 }
@@ -449,9 +455,14 @@ function bindSearch(search) {
     tab.tabIndex = index === 0 ? 0 : -1;
     tab.addEventListener('click', () => selectTab(tab));
     tab.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+      const key = event.key;
+      if (key !== 'ArrowRight' && key !== 'ArrowLeft' && key !== 'Home' && key !== 'End') return;
       event.preventDefault();
-      const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+      const next = key === 'Home'
+        ? tabs[0]
+        : key === 'End'
+          ? tabs[tabs.length - 1]
+          : tabs[(index + (key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
       next.focus();
       selectTab(next);
     });
@@ -459,7 +470,12 @@ function bindSearch(search) {
   const gateway = document.getElementById('sud-gateway');
   if (gateway) gateway.value = 'YUL';
   const duration = document.getElementById('sud-duration');
-  if (duration && [...duration.options].some((opt) => opt.value === '7')) duration.value = '7';
+  if (duration && [...duration.options].some((opt) => opt.value === '7DAYS')) duration.value = '7DAYS';
+  const dest = document.getElementById('sud-dest');
+  if (dest) {
+    const tout = [...dest.options].find((opt) => opt.textContent.trim() === 'Tout Sud');
+    if (tout) dest.value = tout.value;
+  }
   const from = document.getElementById('vol-from');
   if (from) from.value = 'YUL';
   document.getElementById('sud-children')?.addEventListener('change', (event) => {
@@ -469,7 +485,6 @@ function bindSearch(search) {
   document.getElementById('vol-trip')?.addEventListener('change', (event) => {
     document.getElementById('vol-return-wrap').hidden = event.target.value === 'oneway';
   });
-  bindCombo('sud-dest', search.sud.destinations);
   bindCombo('vol-to', search.vols.destinations);
   bindCombo('cruise-port', search.croisieres.ports);
   bindCombo('cruise-dest', search.croisieres.destinations);
@@ -479,14 +494,14 @@ function bindSearch(search) {
     event.preventDefault();
     const url = buildSudSearchUrl({
       gateway: document.getElementById('sud-gateway').value,
-      destination: document.getElementById('sud-dest-value').value,
+      destination: document.getElementById('sud-dest').value,
       date: document.getElementById('sud-date').value,
       duration: document.getElementById('sud-duration').value,
       adults: document.getElementById('sud-adults').value,
       children: document.getElementById('sud-children').value,
       childAges: document.getElementById('sud-ages').value
     });
-    window.open(url, '_blank', 'noopener');
+    openSearchResult(url);
   });
   document.getElementById('panel-vols')?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -504,7 +519,7 @@ function bindSearch(search) {
       trip: document.getElementById('vol-trip').value,
       adults: document.getElementById('vol-adults').value
     });
-    window.open(url, '_blank', 'noopener');
+    openSearchResult(url);
   });
   document.getElementById('panel-cruise')?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -516,7 +531,7 @@ function bindSearch(search) {
       duration: document.getElementById('cruise-duration').value || '0',
       adults: '2'
     });
-    window.open(url, '_blank', 'noopener');
+    openSearchResult(url);
   });
   document.getElementById('panel-car')?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -530,7 +545,7 @@ function bindSearch(search) {
       pickup: document.getElementById('car-from').value,
       dropoff: document.getElementById('car-to').value
     });
-    window.open(url, '_blank', 'noopener');
+    openSearchResult(url);
   });
 }
 
@@ -550,19 +565,19 @@ function renderHome(groups, search, failed) {
   };
   main.innerHTML = `
     <section class="hero"><div class="hero-grid">
-      <div>
-        <p class="eyebrow">Forfaits, croisières et voyages</p>
-        <h1>Forfaits sud, vols, croisières et voyages de groupe</h1>
-        <p>Recherchez un départ ou parcourez les groupes publiés par Voyage Fiesta. La demande d'information part avec le voyage déjà indiqué.</p>
-        <a class="btn" href="${esc(href('forfaits-sud/'))}">Voir les forfaits sud</a>
+      <div class="hero-copy">
+        <p class="eyebrow">Votre prochaine évasion commence ici</p>
+        <h1>Voyagez vers<br>l’essentiel</h1>
+        <p>Des expériences uniques, des souvenirs inoubliables.</p>
+        <a class="btn" href="${esc(href('forfaits-sud/'))}">Découvrir nos offres</a>
       </div>
       ${searchCard(search)}
     </div></section>
-    <section class="trust" data-animate>
-      <article><h2>Accompagnement</h2><p>Un conseiller suit le dossier avant le départ, pendant le voyage et au retour.</p></article>
-      <article><h2>Prix du groupe</h2><p>Le prix affiché est le prix d'appel publié pour le groupe. Un conseiller confirme la place.</p></article>
-      <article><h2>Questions</h2><p>L'équipe répond sur les dates, les hôtels, les navires et les cabines.</p></article>
-      <article><h2>Demande</h2><p>Le formulaire envoie la demande au dossier, avec le voyage choisi.</p></article>
+    <section class="trust" aria-label="Engagements" data-animate>
+      <article><span class="check">${ico('check')}</span><h2>Voyage en toute sérénité</h2><p>Un accompagnement avant, pendant et après votre voyage.</p></article>
+      <article><span class="check">${ico('check')}</span><h2>Meilleurs prix garantis</h2><p>Nous vous proposons les meilleures options selon vos besoins.</p></article>
+      <article><span class="check">${ico('check')}</span><h2>Conseillers à votre écoute</h2><p>Une équipe disponible et passionnée pour vous conseiller.</p></article>
+      <article><span class="check">${ico('check')}</span><h2>Des expériences sur mesure</h2><p>Des voyages personnalisés selon vos envies.</p></article>
     </section>
     ${failed ? `<section class="section"><div class="wrap">${unavailable()}</div></section>` : ''}
     ${block('sud', 'Forfaits SUD', 'forfaits-sud/')}
@@ -714,8 +729,46 @@ function rich(value) {
 }
 
 function listBlock(title, items) {
-  if (!items?.length) return '';
-  return `<section class="panel"><h2>${esc(title)}</h2><ul>${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
+  const clean = publicList(items);
+  if (!clean.length) return '';
+  return `<section class="panel"><h2>${esc(title)}</h2><ul>${clean.map((item) => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
+}
+
+function chipBlock(title, items) {
+  const clean = readableServices(items);
+  if (!clean.length) return '';
+  return `<h3>${esc(title)}</h3><ul class="chips">${clean.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+}
+
+function factList(pairs) {
+  const rows = pairs.filter(([, value]) => {
+    const text = plainText(value).replace(/\s+/g, ' ').trim();
+    if (!text || /^0+([.,]0+)?$/.test(text)) return false;
+    if (/^(null|undefined|n\/a|n\.a\.|na)$/i.test(text)) return false;
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) return false;
+    if (text === '1970') return false;
+    return true;
+  });
+  if (!rows.length) return '';
+  return `<ul>${rows.map(([label, value]) => `<li>${esc(label)}: ${esc(value)}</li>`).join('')}</ul>`;
+}
+
+function galleryHtml(group) {
+  const raw = group.images?.length ? group.images : (group.image ? [{ url: group.image, alt: group.title, source: group.imageSource || group.source || '' }] : []);
+  const seen = new Set();
+  const photos = [];
+  raw.forEach((image) => {
+    const photo = catalogImage(image, { imageSource: group.imageSource, source: group.source });
+    const key = photo.src || photo.fallback;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    photos.push({ photo, alt: (image && image.alt) || '' });
+  });
+  if (!photos.length) return '';
+  return `<section class="panel" data-gallery><h2>Galerie photos</h2><div class="gallery">${photos.map(({ photo, alt }, index) => {
+    const label = alt || `${group.title}, photo ${index + 1}`;
+    return `<button type="button" data-photo="${esc(photo.src || photo.fallback)}"${photo.fallback ? ` data-fallback="${esc(photo.fallback)}"` : ''} aria-label="Agrandir la photo ${index + 1}">${imgTag(photo.src ? photo : { src: photo.fallback, fallback: '' }, label, ' decoding="async"')}</button>`;
+  }).join('')}</div></section>`;
 }
 
 function renderDetail(groups) {
@@ -737,56 +790,63 @@ function renderDetail(groups) {
   const hero = heroPhoto.src;
   const heroStyle = hero ? ` style="--hero:url('${esc(hero)}')"${heroPhoto.fallback ? ` data-hero-fallback="${esc(heroPhoto.fallback)}"` : ''}` : '';
   const duration = [group.dureeJours ? `${group.dureeJours} jours` : '', group.dureeNuits ? `${group.dureeNuits} nuits` : ''].filter(Boolean).join(', ');
+  const departLabel = publicDate(group.dateDepart);
   const hotel = group.hotelDetail;
   const ship = group.navireDetail;
-  const stay = hotel?.nom ? `
+  const stars = hotel?.etoiles > 0 ? String(hotel.etoiles).replace('.', ',') : '';
+  const stayFacts = factList([
+    ['Destination', hotel?.destination],
+    ['Chaîne', hotel?.chaine],
+    ['Classification', stars ? `${stars} étoiles` : '']
+  ]);
+  const stayChips = chipBlock('Caractéristiques et services', hotel?.services);
+  const stayBody = `${plainText(hotel?.description) ? rich(hotel.description) : ''}${stayFacts}${stayChips}`;
+  const stay = hotel?.nom && isPublicText(hotel.nom) && (stayBody || hotel.nom) ? `
     <section class="panel"><h2>${esc(hotel.nom)}</h2>
-      ${hotel.description ? rich(hotel.description) : ''}
-      <ul>
-        ${hotel.destination ? `<li>Destination: ${esc(hotel.destination)}</li>` : ''}
-        ${hotel.chaine ? `<li>Chaîne: ${esc(hotel.chaine)}</li>` : ''}
-        ${hotel.etoiles ? `<li>Classification: ${esc(String(hotel.etoiles).replace('.', ','))} étoiles</li>` : ''}
-      </ul>
-      ${hotel.services?.length ? `<h3>Caractéristiques et services</h3><ul class="chips">${hotel.services.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : ''}
+      ${stayBody}
     </section>` : '';
-  const shipBlock = group.type === 'cruise' && (ship?.nom || group.navire) ? `
-    <section class="panel"><h2>${esc(ship?.nom || group.navire)}</h2>
-      ${ship?.description ? rich(ship.description) : ''}
-      <ul>
-        ${ship?.compagnie || group.compagnie ? `<li>Compagnie: ${esc(ship?.compagnie || group.compagnie)}</li>` : ''}
-        ${ship?.passagers ? `<li>Passagers: ${esc(ship.passagers)}</li>` : ''}
-        ${ship?.tonnage ? `<li>Tonnage: ${esc(ship.tonnage)}</li>` : ''}
-        ${ship?.annee ? `<li>Mise en service: ${esc(ship.annee)}</li>` : ''}
-      </ul>
-      ${ship?.services?.length ? `<h3>Caractéristiques et services</h3><ul class="chips">${ship.services.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : ''}
+  const shipName = ship?.nom || group.navire;
+  const shipFacts = factList([
+    ['Compagnie', ship?.compagnie || group.compagnie],
+    ['Passagers', ship?.passagers > 0 ? ship.passagers : ''],
+    ['Tonnage', ship?.tonnage > 0 ? ship.tonnage : ''],
+    ['Mise en service', shipYear(ship?.annee)]
+  ]);
+  const shipChips = chipBlock('Caractéristiques et services', ship?.services);
+  const shipBody = `${plainText(ship?.description) ? rich(ship.description) : ''}${shipFacts}${shipChips}`;
+  const shipBlock = group.type === 'cruise' && isPublicText(shipName) ? `
+    <section class="panel"><h2>${esc(shipName)}</h2>
+      ${shipBody}
     </section>` : '';
-  const rateRows = (group.tarifs || []).map((row) => ({ ...row, categorie: plainText(row.categorie), disponibilite: plainText(row.disponibilite) }));
-  // Atrium n'envoie souvent ni catégorie ni disponibilité: on masque les colonnes vides
-  // au lieu d'afficher « Tarif » partout et une colonne blanche.
-  const showCat = rateRows.some((row) => row.categorie && row.categorie !== 'Tarif');
+  const rateRows = visibleRates(group.tarifs).map((row) => ({
+    ...row,
+    categorie: plainText(row.categorie),
+    disponibilite: plainText(row.disponibilite)
+  }));
   const showPrev = rateRows.some((row) => formatPrice(row.prixAncien));
-  const showDispo = rateRows.some((row) => row.disponibilite);
+  const showDispo = rateRows.some((row) => isPublicText(row.disponibilite));
   const rates = rateRows.length ? `<section class="panel"><h2>Tarifs disponibles</h2>
-    <table><caption class="sr-only">Tarifs du groupe</caption><thead><tr>${showCat ? '<th>Catégorie</th>' : '<th>Option</th>'}<th>Prix</th>${showPrev ? '<th>Prix précédent</th>' : ''}${showDispo ? '<th>Disponibilité</th>' : ''}</tr></thead>
-    <tbody>${rateRows.map((row, index) => `<tr><td>${esc(showCat ? (row.categorie || 'Tarif') : `Option ${index + 1}`)}</td><td>${esc(formatPrice(row.prix) || 'Sur demande')}</td>${showPrev ? `<td>${esc(formatPrice(row.prixAncien) || '')}</td>` : ''}${showDispo ? `<td>${esc(row.disponibilite || '')}</td>` : ''}</tr>`).join('')}</tbody></table>
+    <table><caption class="sr-only">Tarifs du groupe</caption><thead><tr><th scope="col">Catégorie</th><th scope="col">Prix</th>${showPrev ? '<th scope="col">Prix précédent</th>' : ''}${showDispo ? '<th scope="col">Disponibilité</th>' : ''}</tr></thead>
+    <tbody>${rateRows.map((row) => `<tr><td>${esc(row.categorie)}</td><td>${esc(formatPrice(row.prix) || 'Sur demande')}</td>${showPrev ? `<td>${esc(formatPrice(row.prixAncien) || '')}</td>` : ''}${showDispo ? `<td>${esc(isPublicText(row.disponibilite) ? row.disponibilite : '')}</td>` : ''}</tr>`).join('')}</tbody></table>
     <p class="fine">Les tarifs affichés viennent du catalogue du groupe. Les prix et les places peuvent changer. Un conseiller confirme le total.</p></section>` : '';
-  const flights = group.vols?.length ? `<section class="panel"><h2>Vols</h2><ul>${group.vols.map((vol) => `<li>${esc([vol.sens, vol.compagnie, vol.numero, vol.depart && vol.arrivee ? `${vol.depart} vers ${vol.arrivee}` : '', formatDate(vol.dateDepart)].filter(Boolean).join(', '))}</li>`).join('')}</ul></section>` : '';
-  const steps = group.itineraire?.length ? `<section class="panel"><h2>Itinéraire</h2><ol>${group.itineraire.map((step) => `<li>${plainText(step.titre) ? `<strong>${esc(step.titre)}</strong>` : ''}${step.description ? rich(step.description) : ''}</li>`).join('')}</ol></section>` : '';
+  const flightItems = (group.vols || []).map((vol) => [vol.sens, vol.compagnie, vol.numero, vol.depart && vol.arrivee ? `${vol.depart} vers ${vol.arrivee}` : '', publicDate(vol.dateDepart)].filter(isPublicText).join(', ')).filter(isPublicText);
+  const flights = flightItems.length ? `<section class="panel"><h2>Vols</h2><ul>${flightItems.map((item) => `<li>${esc(item)}</li>`).join('')}</ul></section>` : '';
+  const lines = itineraryLines(group.itineraire);
+  const steps = lines.length ? `<section class="panel"><h2>Itinéraire</h2><ol>${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ol></section>` : '';
+  const priceNote = rateRows.length
+    ? 'Prix d\'appel publié pour ce groupe, par personne, selon la catégorie indiquée.'
+    : 'Prix d\'appel publié pour ce groupe, par personne.';
   main.innerHTML = `
     <section class="detail-hero"${heroStyle}><div class="wrap">
       <p class="eyebrow">${esc(categoryLabel(group.type))}</p>
       <h1>${esc(group.title)}</h1>
-      <div class="meta"><span>Départ le ${esc(formatDate(group.dateDepart) || 'date à confirmer')}</span>${duration ? `<span>${esc(duration)}</span>` : ''}<strong>${priceLine(group)}</strong></div>
+      <div class="meta"><span>Départ le ${esc(departLabel || 'date à confirmer')}</span>${duration ? `<span>${esc(duration)}</span>` : ''}<strong>${priceLine(group)}</strong></div>
     </div></section>
     <div class="wrap layout">
       <div>
         <p><a href="${esc(href(back))}">Retour à la liste</a></p>
-        ${images.length ? `<section class="panel"><h2>Galerie photos</h2><div class="gallery">${images.map((image, index) => {
-          const photo = catalogImage(image, { imageSource: group.imageSource });
-          const alt = image.alt || `${group.title}, photo ${index + 1}`;
-          return `<button type="button" data-photo="${esc(photo.src)}"${photo.fallback ? ` data-fallback="${esc(photo.fallback)}"` : ''} aria-label="Agrandir la photo ${index + 1}">${imgTag(photo, alt, ' loading="lazy" decoding="async"')}</button>`;
-        }).join('')}</div></section>` : ''}
-        ${group.description ? `<section class="panel"><h2>Description</h2>${rich(group.description)}</section>` : ''}
+        ${galleryHtml(group)}
+        ${plainText(group.description) ? `<section class="panel"><h2>Description</h2>${rich(group.description)}</section>` : ''}
         ${listBlock('Points forts', group.pointsForts)}
         ${listBlock('Inclusions', group.inclusions)}
         ${listBlock('Exclusions', group.exclusions)}
@@ -802,9 +862,9 @@ function renderDetail(groups) {
         <section class="panel">
           <p class="eyebrow">Votre prochain départ</p>
           <h2>${esc(group.title)}</h2>
-          <p>Départ: ${esc(formatDate(group.dateDepart) || 'à confirmer')}</p>
+          <p>Départ: ${esc(departLabel || 'à confirmer')}</p>
           <p>${priceLine(group)}</p>
-          <p class="fine">Prix d'appel publié pour ce groupe, par personne, selon la catégorie indiquée.</p>
+          <p class="fine">${esc(priceNote)}</p>
           <form id="form-fiche" data-group="${esc(group.id)}">${formFields(group, 'fiche')}</form>
           <p><a href="${esc(cfg.phoneHref || 'tel:+15148566614')}">Appeler au ${esc(phone())}</a></p>
           <div class="share-row">
@@ -878,7 +938,9 @@ function observe() {
   const nodes = [...document.querySelectorAll('[data-animate]')];
   if (!nodes.length) return;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced || !('IntersectionObserver' in window)) {
+  let framed = false;
+  try { framed = window.self !== window.top; } catch (_) { framed = true; }
+  if (framed || embedOn() || reduced || !('IntersectionObserver' in window)) {
     nodes.forEach((node) => node.classList.add('is-in'));
     return;
   }
@@ -888,7 +950,7 @@ function observe() {
       entry.target.classList.add('is-in');
       observer.unobserve(entry.target);
     });
-  }, { threshold: 0.5 });
+  }, { threshold: 0, rootMargin: '0px 0px -8% 0px' });
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
     if (rect.top < window.innerHeight * 0.92 && rect.bottom > 0) node.classList.add('is-in');
@@ -915,13 +977,34 @@ function setCanonical() {
   link.href = new URL(location.pathname + location.search, cfg.canonicalOrigin).href;
 }
 
+function dropGalleryTile(img) {
+  const tile = img.closest('[data-photo]') || img;
+  const gallery = img.closest('.gallery');
+  tile.remove();
+  if (gallery && !gallery.querySelector('img')) gallery.closest('section')?.remove();
+}
+
 function useRemoteImage(event) {
   const img = event.target;
   if (!img || img.tagName !== 'IMG') return;
   const { next, rest } = nextFallback(img.dataset.fallback, img.getAttribute('src'));
-  if (rest) img.dataset.fallback = rest;
-  else img.removeAttribute('data-fallback');
-  if (next) img.src = next;
+  if (next) {
+    if (rest) img.dataset.fallback = rest;
+    else img.removeAttribute('data-fallback');
+    img.src = next;
+    return;
+  }
+  if (img.closest('.gallery')) {
+    dropGalleryTile(img);
+    return;
+  }
+  const media = img.closest('.card-media');
+  if (media) {
+    const span = document.createElement('span');
+    span.className = 'card-fallback';
+    span.setAttribute('aria-hidden', 'true');
+    img.replaceWith(span);
+  }
 }
 
 async function main() {
