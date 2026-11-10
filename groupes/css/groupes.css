@@ -430,7 +430,18 @@ html.embed-mode .vf-site-header,
 html.embed-mode .vf-site-footer,
 html.embed-mode .orb { display: none !important; }
 html.embed,
-html.embed-mode { --header: 0px; }
+html.embed-mode {
+  --header: 0px;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+html.embed body,
+html.embed-mode body {
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
 html.embed [data-animate],
 html.embed-mode [data-animate] { opacity: 1; transform: none; animation: none; }
 .site-footer { background: #fff; border-top: 1px solid var(--line); padding: 1.5rem 0 2rem; color: var(--muted); }
