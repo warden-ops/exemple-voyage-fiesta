@@ -317,6 +317,15 @@ h1 { font-size: clamp(2rem, 4vw, 3.2rem); margin: 0 0 0.8rem; }
 .card h2 a:hover, .card h3 a:hover { text-decoration: underline; }
 .muted { color: var(--muted); margin: 0; font-size: 0.92rem; }
 .price { font-weight: 700; color: var(--blue); }
+.conseiller { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--blue-dark); }
+.conseiller a { color: inherit; text-decoration: underline; text-underline-offset: 0.18em; }
+.conseiller a:hover { color: var(--orange); }
+.conseiller a:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; }
+.card .conseiller { font-size: 0.9rem; }
+.side .conseiller { margin: 0.15rem 0 0.35rem; font-size: 1.02rem; }
+.detail-hero .conseiller, .detail-hero .conseiller a { color: #fff; }
+.detail-hero .conseiller a:hover { color: #ffe8dc; }
+.detail-hero .conseiller a:focus-visible { outline-color: #fff; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: auto; padding-top: 0.45rem; }
 .card-actions a {
   flex: 1 1 7rem;

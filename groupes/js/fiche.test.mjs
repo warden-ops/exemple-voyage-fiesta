@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  conseillerLine,
   demandePayload,
   groupLinks,
   isReadableService,
@@ -55,6 +56,25 @@ test('services bruts sortent, les noms lisibles restent', () => {
 test('une date 1970 ne s\'affiche pas', () => {
   assert.equal(publicDate('1970-01-01'), '');
   assert.equal(publicDate('2026-11-01'), '1 novembre 2026');
+});
+
+test('la fiche nomme le conseiller du lien, et n\'affiche rien sans nom', () => {
+  const html = conseillerLine(
+    { name: 'Éric Lacasse', slug: 'eric-lacasse' },
+    '/agents/eric-lacasse/?ref=eric-lacasse&ghl_user=fG599Arfh45eLVOMCMLh'
+  );
+  assert.match(html, /Ton conseiller : /);
+  assert.match(html, />Éric Lacasse<span class="sr-only">, page du conseiller<\/span><\/a>/);
+  assert.match(html, /href="\/agents\/eric-lacasse\/\?ref=eric-lacasse&amp;ghl_user=fG599Arfh45eLVOMCMLh"/);
+  assert.doesNotMatch(html, /[—–]|[\u{1F300}-\u{1FAFF}]/u);
+  assert.equal(conseillerLine(null, '/agents/eric-lacasse/'), '');
+  assert.equal(conseillerLine({ name: '   ' }, '/agents/eric-lacasse/'), '');
+  const plain = conseillerLine({ name: 'Kevin Watier' }, '');
+  assert.match(plain, /Ton conseiller : Kevin Watier/);
+  assert.doesNotMatch(plain, /<a /);
+  const unsafe = conseillerLine({ name: 'A <b> & "c"' }, 'javascript:alert(1)');
+  assert.match(unsafe, /A &lt;b&gt; &amp; &quot;c&quot;/);
+  assert.doesNotMatch(unsafe, /<b>|<script/);
 });
 
 test('Détails et Réserver gardent ref, ghl_user et utm', () => {
