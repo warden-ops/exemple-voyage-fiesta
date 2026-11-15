@@ -161,6 +161,29 @@ export function copyLeadParams(target, source, agent) {
   return out;
 }
 
+function escHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * « Ton conseiller : Nom », avec un lien vers /agents/<slug>/ quand on en a un.
+ * Chaîne vide si le conseiller du lien est inconnu : pas de texte de remplacement.
+ */
+export function conseillerLine(agent, href) {
+  const name = String(agent?.name || '').replace(/\s+/g, ' ').trim();
+  if (!name) return '';
+  const safeName = escHtml(name);
+  const url = String(href || '').trim();
+  const nameHtml = url
+    ? `<a href="${escHtml(url)}">${safeName}<span class="sr-only">, page du conseiller</span></a>`
+    : safeName;
+  return `<p class="conseiller">Ton conseiller : ${nameHtml}</p>`;
+}
+
 export function groupLinks(group, { source = '', agent = null, embed = false } = {}) {
   const params = new URLSearchParams();
   params.set('id', String(group.id));

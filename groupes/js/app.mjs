@@ -1,4 +1,5 @@
 import {
+  conseillerLine,
   copyLeadParams,
   demandePayload,
   isPublicText,
@@ -109,6 +110,17 @@ function groupHref(group) {
   return url.pathname + url.search;
 }
 
+function agentPageHref(agent) {
+  if (!agent?.slug) return '';
+  return href(`/agents/${encodeURIComponent(agent.slug)}/`);
+}
+
+function conseillerMarkup() {
+  const agent = sharedAgent();
+  if (!agent?.name) return '';
+  return conseillerLine(agent, agentPageHref(agent));
+}
+
 function phone() {
   return cfg.phoneDisplay || '514-856-6614';
 }
@@ -191,6 +203,7 @@ function card(group) {
       <p class="muted">${esc(providerOf(group))}</p>
       ${when ? `<p class="muted">${esc(when)}</p>` : ''}
       <p>${priceLine(group)}</p>
+      ${conseillerMarkup()}
       <div class="card-actions">
         <a class="btn-detail" href="${esc(detail)}" aria-label="Détails, ${esc(group.title)}">Détails</a>
         <a class="btn-book" href="${esc(reserve)}" aria-label="Réserver ${esc(group.title)}">Réserver</a>
@@ -840,7 +853,7 @@ function renderDetail(groups) {
     <section class="detail-hero"${heroStyle}><div class="wrap">
       <p class="eyebrow">${esc(categoryLabel(group.type))}</p>
       <h1>${esc(group.title)}</h1>
-      <div class="meta"><span>Départ le ${esc(departLabel || 'date à confirmer')}</span>${duration ? `<span>${esc(duration)}</span>` : ''}<strong>${priceLine(group)}</strong></div>
+      <div class="meta"><span>Départ le ${esc(departLabel || 'date à confirmer')}</span>${duration ? `<span>${esc(duration)}</span>` : ''}<strong>${priceLine(group)}</strong>${conseillerMarkup()}</div>
     </div></section>
     <div class="wrap layout">
       <div>
@@ -864,6 +877,7 @@ function renderDetail(groups) {
           <h2>${esc(group.title)}</h2>
           <p>Départ: ${esc(departLabel || 'à confirmer')}</p>
           <p>${priceLine(group)}</p>
+          ${conseillerMarkup()}
           <p class="fine">${esc(priceNote)}</p>
           <form id="form-fiche" data-group="${esc(group.id)}">${formFields(group, 'fiche')}</form>
           <p><a href="${esc(cfg.phoneHref || 'tel:+15148566614')}">Appeler au ${esc(phone())}</a></p>
