@@ -6,6 +6,8 @@
  *   window.VFLeadRef.attach(payload)  -> copy of payload with lead_* keys added
  *
  * A new link with ref or ghl_user replaces the stored values (last click).
+ * On /agents/<slug>/, the page's own agent (window.AGENT_PAGE) wins over a
+ * stale stored lead_ghl_user from another advisor.
  * The server validates ghl_user and never reassigns an owned contact.
  */
 (function (global) {
@@ -50,6 +52,29 @@
         }
     }
 
+    function pathSlug() {
+        try {
+            var path = String((global.location && global.location.pathname) || '');
+            var m = path.match(/\/agents\/([a-z0-9][a-z0-9-]{0,59})\/?$/i);
+            return m ? m[1].toLowerCase() : '';
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function pageAgent() {
+        var baked = global.AGENT_PAGE;
+        if (!baked || typeof baked !== 'object') return null;
+        var fromPath = pathSlug();
+        if (!fromPath) return null;
+        var slug = clean(String(baked.slug || '').toLowerCase(), REF_RE);
+        var id = clean(baked.id, USER_RE);
+        if (slug && slug !== fromPath) return null;
+        if (!slug) slug = fromPath;
+        if (!slug && !id) return null;
+        return { ref: slug, ghl_user: id };
+    }
+
     function capture(search) {
         var params;
         try {
@@ -59,6 +84,13 @@
         }
         var ref = clean(String(params.get('ref') || '').toLowerCase(), REF_RE);
         var ghlUser = clean(params.get('ghl_user'), USER_RE);
+        var page = pageAgent();
+        // On an advisor page, that advisor always wins over a leftover 30-day
+        // lead_ghl_user (and over query params for a different agent).
+        if (page) {
+            ref = page.ref || ref;
+            ghlUser = page.ghl_user || ghlUser;
+        }
         if (!ref && !ghlUser) return read();
         var data = {
             ref: ref,

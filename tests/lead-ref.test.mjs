@@ -15,8 +15,12 @@ function memoryStorage() {
   };
 }
 
-function load(search, storage = memoryStorage()) {
-  const window = { location: { search }, localStorage: storage };
+function load(search, storage = memoryStorage(), extra = {}) {
+  const window = {
+    location: { search, pathname: extra.pathname || '' },
+    localStorage: storage,
+    AGENT_PAGE: extra.AGENT_PAGE
+  };
   vm.runInNewContext(source, { window, URLSearchParams, Date, JSON });
   return { api: window.VFLeadRef, storage };
 }
@@ -60,4 +64,31 @@ test('works without localStorage (private mode)', () => {
   const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); }, removeItem() {} };
   const { api } = load(link, broken);
   assert.equal(api.attach({}).lead_ref, 'kevin-watier');
+});
+
+test('on an /agents/<slug>/ page, the page agent wins over a stale stored lead', () => {
+  const { storage } = load(link);
+  const anny = { id: 'o6Mx5Liscw7hC4govkws', slug: 'anny-blondeau', name: 'Anny Blondeau' };
+  const { api } = load('', storage, { pathname: '/agents/anny-blondeau/', AGENT_PAGE: anny });
+  const out = api.attach({ email: 'a@b.c' });
+  assert.equal(out.lead_ref, 'anny-blondeau');
+  assert.equal(out.lead_ghl_user, 'o6Mx5Liscw7hC4govkws');
+  assert.equal(out.lead_utm_campaign, undefined);
+});
+
+test('on an advisor page, the page agent also wins over another agent in the query string', () => {
+  const anny = { id: 'o6Mx5Liscw7hC4govkws', slug: 'anny-blondeau' };
+  const { api } = load(link, memoryStorage(), { pathname: '/agents/anny-blondeau/', AGENT_PAGE: anny });
+  const out = api.attach({});
+  assert.equal(out.lead_ref, 'anny-blondeau');
+  assert.equal(out.lead_ghl_user, 'o6Mx5Liscw7hC4govkws');
+  assert.equal(out.lead_utm_campaign, 'fb-2026-10-22');
+});
+
+test('off the advisor page, a stored lead is unchanged', () => {
+  const { storage } = load(link);
+  const { api } = load('', storage, { pathname: '/product.html' });
+  const out = api.attach({});
+  assert.equal(out.lead_ref, 'kevin-watier');
+  assert.equal(out.lead_ghl_user, 'CMV5ZlTlfOJI5lzM1Rw5');
 });
