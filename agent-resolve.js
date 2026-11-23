@@ -6,7 +6,8 @@
  *   VFAgent.current()        matched staff profile or null
  *   VFAgent.resolve(list, hint)
  *   VFAgent.cardHtml(agent, { voyage })
- *   VFAgent.shopContactHtml(agent)  boutique strip, or '' when no advisor
+ *   VFAgent.shopContactHtml(agent)       contact strip, or '' without a name
+ *   VFAgent.ownerContactHtml(staff, id) strip for a product's GHL owner, or ''
  *   VFAgent.shareUrl(url, agent, utm)
  */
 (function (global) {
@@ -126,8 +127,47 @@
     }
 
     /**
-     * Contact strip for the Aubaines Express listing (master and ?agent=).
-     * Empty when the shared link did not resolve an advisor: no shell, no fallback.
+     * Company accounts that live in staff.json but have no public advisor page.
+     * Same slugs as scripts/agent-pages.mjs DEFAULT_HIDDEN_SLUGS.
+     */
+    var HIDDEN_OWNER_SLUGS = {
+        'agence-voyages-fiesta-et-mariage-sud': true,
+        'divison-rabais-voyage': true
+    };
+
+    function extraRow(extraMap, id) {
+        if (!extraMap || typeof extraMap !== 'object' || Array.isArray(extraMap)) return {};
+        var map = extraMap.agents && typeof extraMap.agents === 'object' && !Array.isArray(extraMap.agents)
+            ? extraMap.agents
+            : extraMap;
+        var row = map[String(id || '')];
+        return row && typeof row === 'object' ? row : {};
+    }
+
+    function isPublicAgent(agent, extraMap) {
+        var person = profile(agent);
+        if (!person || !person.name || !person.slug) return false;
+        var row = extraRow(extraMap, person.id);
+        if (row.hidden === true) return false;
+        if (row.hidden === false) return true;
+        return !HIDDEN_OWNER_SLUGS[person.slug];
+    }
+
+    /**
+     * Contact strip for one forfait page.
+     * ownerId is the GHL user who owns that voyage. Empty unless that user is a
+     * published advisor in staff.json. Phone and email lines are omitted when missing.
+     */
+    function ownerContactHtml(agents, ownerId, extraMap) {
+        var id = String(ownerId || '').trim();
+        if (!id) return '';
+        var agent = byId(agents, id);
+        if (!isPublicAgent(agent, extraMap)) return '';
+        return shopContactHtml(agent);
+    }
+
+    /**
+     * Contact strip markup. Empty without a name and a slug.
      * Phone and email lines are omitted when that field is missing.
      */
     function shopContactHtml(agent) {
@@ -247,6 +287,7 @@
         initial: initial,
         cardHtml: cardHtml,
         shopContactHtml: shopContactHtml,
+        ownerContactHtml: ownerContactHtml,
         shareUrl: shareUrl,
         current: current,
         prepare: prepare,

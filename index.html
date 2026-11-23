@@ -240,7 +240,6 @@
     </header>
 
     <header class="vf-site-header" id="vf-site-header"></header>
-    <div id="vf-agent-contact"></div>
     <section class="vf-home-hero">
         <div class="vf-home-hero__grid">
             <div>
@@ -820,23 +819,7 @@
             backNav.classList.toggle('hidden', !agentKey);
         }
 
-        function renderVisitorAgentContact() {
-            const slot = document.getElementById('vf-agent-contact');
-            if (!slot || !window.VFAgent || typeof VFAgent.shopContactHtml !== 'function') return;
-            const agent = typeof VFAgent.current === 'function' ? VFAgent.current() : null;
-            slot.innerHTML = VFAgent.shopContactHtml(agent);
-            if (window.VoyageFiestaEmbed && typeof VoyageFiestaEmbed.patchLinks === 'function') {
-                VoyageFiestaEmbed.patchLinks(slot);
-            }
-            if (window.VoyageFiestaEmbed && typeof VoyageFiestaEmbed.notifyParentHeight === 'function') {
-                VoyageFiestaEmbed.notifyParentHeight();
-            }
-        }
-
         async function init() {
-            const agentReady = window.VFAgent?.prepare ? VFAgent.prepare('staff.json') : Promise.resolve(null);
-            agentReady.then(renderVisitorAgentContact, renderVisitorAgentContact);
-
             if (!window.VoyageFiestaAPI || typeof VoyageFiestaAPI.fetchProducts !== 'function') {
                 document.getElementById('loading-state').classList.add('hidden');
                 document.getElementById('error-state').classList.remove('hidden');
@@ -850,7 +833,11 @@
             document.getElementById('empty-state').classList.add('hidden');
             document.getElementById('error-state').classList.add('hidden');
             try {
-                products = await VoyageFiestaAPI.fetchProducts({ agent: agentKey });
+                const loaded = await Promise.all([
+                    VoyageFiestaAPI.fetchProducts({ agent: agentKey }),
+                    window.VFAgent?.prepare ? VFAgent.prepare('staff.json') : null
+                ]);
+                products = loaded[0];
                 buildDestinationFilter(products);
                 buildSupplierFilter(products);
                 buildDepartureDateFilter(products);
