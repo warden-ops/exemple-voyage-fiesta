@@ -127,15 +127,49 @@ test('a stored advisor still fills the boutique contact block', () => {
   assert.match(html, /href="mailto:p2@voyagefiesta.com"/);
 });
 
-test('the listing mounts the contact block above the hero and only from the shared advisor', () => {
+test('a product owner who is a published advisor gets the contact block', () => {
+  const api = load('?ref=eric-lacasse&ghl_user=userEric1234');
+  const html = api.ownerContactHtml(staff, 'userEric1234');
+  assert.match(html, /Éric Lacasse|Eric Lacasse/);
+  assert.match(html, /href="\/agents\/eric-lacasse\/"/);
+  assert.match(html, /href="tel:\+15145550100"/);
+  assert.doesNotMatch(html, /data-anim/);
+  const yancie = api.ownerContactHtml(
+    [{ id: '2k9aRsh2OkTdG7TnIiGo', slug: 'yancie-auclair', name: 'Yancie Auclair', email: 'yancie@voyagefiesta.com', phone: '+14505012547' }],
+    '2k9aRsh2OkTdG7TnIiGo'
+  );
+  assert.match(yancie, /Page d'Yancie Auclair/);
+  assert.match(yancie, /href="mailto:yancie@voyagefiesta.com"/);
+});
+
+test('no owner, an unknown user, or a hidden company account renders nothing', () => {
+  const api = load('?ref=eric-lacasse&ghl_user=userEric1234');
+  const directory = staff.concat([
+    { id: 'agencyAdmin1', slug: 'agence-voyages-fiesta-et-mariage-sud', name: 'Agence Voyages Fiesta', email: 'info@promo.voyagefiesta.com', phone: '+15148566614' }
+  ]);
+  assert.equal(api.ownerContactHtml(directory, ''), '');
+  assert.equal(api.ownerContactHtml(directory, null), '');
+  assert.equal(api.ownerContactHtml(directory, 'notARealUser'), '');
+  assert.equal(api.ownerContactHtml(directory, 'agencyAdmin1'), '');
+  assert.equal(api.ownerContactHtml(directory, 'agencyAdmin1', { agencyAdmin1: { hidden: false } }).includes('Agence'), true);
+  assert.equal(api.shopContactHtml(api.resolve(staff, api.readHint())).includes('eric-lacasse'), true);
+  assert.equal(api.ownerContactHtml(directory, 'userEric1234', { userEric1234: { hidden: true } }), '');
+});
+
+test('the contact block is on the forfait page only, from the product owner', () => {
   const index = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const contactAt = index.indexOf('id="vf-agent-contact"');
-  const heroAt = index.indexOf('class="vf-home-hero"');
-  assert.ok(contactAt > 0 && heroAt > contactAt);
+  const product = readFileSync(new URL('../product.html', import.meta.url), 'utf8');
+  assert.equal(index.includes('id="vf-agent-contact"'), false);
+  assert.equal(index.includes('ownerContactHtml'), false);
+  assert.equal(index.includes('shopContactHtml'), false);
   assert.match(index, /VFAgent\.prepare\('staff\.json'\)/);
-  assert.match(index, /VFAgent\.shopContactHtml\(agent\)/);
-  assert.match(index, /VFAgent\.current\(\)/);
-  assert.doesNotMatch(index, /agent-boutique-header|data-anim="[^"]*"[\s\S]{0,80}vf-shop-agent|id="vf-agent-contact"[^>]*data-anim/);
+  const slotAt = product.indexOf('id="vf-agent-contact"');
+  const contentAt = product.indexOf('id="product-content"');
+  assert.ok(slotAt > 0 && contentAt > slotAt);
+  assert.match(product, /VFAgent\.ownerContactHtml\(productOwnerStaff, ownerId, productOwnerExtra\)/);
+  assert.match(product, /loadOwnerDirectory\(\)/);
+  assert.doesNotMatch(product, /id="vf-agent-contact"[^>]*data-anim/);
+  assert.doesNotMatch(product, /ownerContactHtml\([\s\S]{0,80}VFAgent\.current/);
 });
 
 test('share URL keeps the resolved advisor and drops an unknown one', () => {

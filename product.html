@@ -27,7 +27,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="agent-card.css?v=1">
-    <link rel="stylesheet" href="site-chrome.css?v=2">
+    <link rel="stylesheet" href="site-chrome.css?v=4">
     <script>
         tailwind.config = {
             theme: {
@@ -192,6 +192,8 @@
         </div>
     </header>
 
+    <div id="vf-agent-contact"></div>
+
     <div class="product-countdown-bar bg-red-600 text-white py-2 overflow-hidden">
         <div class="container mx-auto px-4 flex flex-wrap justify-center items-center gap-x-4 gap-y-1 text-center">
             <span class="font-bold text-sm md:text-base">Aubaines Express se termine dans</span>
@@ -229,7 +231,7 @@
     <script src="site-chrome.js?v=2"></script>
 
     <script src="/lead-ref.js?v=1"></script>
-    <script src="/agent-resolve.js?v=1"></script>
+    <script src="/agent-resolve.js?v=3"></script>
     <script src="config.js?v=57"></script>
     <script src="room-registration.js?v=26"></script>
     <script src="api.js?v=109"></script>
@@ -1112,6 +1114,34 @@
             return headerHtml + tableHtml + buildOccupationSelectionHtml(p, isSoldOut);
         }
 
+        let productOwnerStaff = [];
+        let productOwnerExtra = {};
+
+        function renderProductOwnerContact(p) {
+            const slot = document.getElementById('vf-agent-contact');
+            if (!slot) return;
+            const ownerId = p ? (p.ownerId || (p.owner && p.owner.id) || '') : '';
+            const html = window.VFAgent && typeof VFAgent.ownerContactHtml === 'function'
+                ? VFAgent.ownerContactHtml(productOwnerStaff, ownerId, productOwnerExtra)
+                : '';
+            slot.innerHTML = html;
+            if (html && window.VoyageFiestaEmbed && typeof VoyageFiestaEmbed.patchLinks === 'function') {
+                VoyageFiestaEmbed.patchLinks(slot);
+            }
+            if (window.VoyageFiestaEmbed && typeof VoyageFiestaEmbed.notifyParentHeight === 'function') {
+                VoyageFiestaEmbed.notifyParentHeight();
+            }
+        }
+
+        async function loadOwnerDirectory() {
+            const [staffRes, extraRes] = await Promise.all([
+                fetch('staff.json', { cache: 'no-store' }).then((res) => (res.ok ? res.json() : null)).catch(() => null),
+                fetch('agents-extra.json', { cache: 'no-store' }).then((res) => (res.ok ? res.json() : null)).catch(() => null)
+            ]);
+            productOwnerStaff = staffRes && Array.isArray(staffRes.agents) ? staffRes.agents : [];
+            productOwnerExtra = extraRes && typeof extraRes === 'object' ? extraRes : {};
+        }
+
         function renderProduct(p) {
             const isSoldOut = VoyageFiestaAPI.isSoldOut(p);
             const isVendu = VoyageFiestaAPI.isVendu(p);
@@ -1225,6 +1255,7 @@
                 embedBreadcrumbEl.innerHTML = VoyageFiestaAPI.renderEmbedBreadcrumbHtml(embedBreadcrumbItems);
             }
 
+            renderProductOwnerContact(p);
             document.getElementById('product-content').innerHTML = `
                 <section class="container mx-auto px-4 py-6">
                     <nav class="product-breadcrumb-inline text-lg sm:text-xl text-gray-600 mb-4 flex gap-2 flex-wrap items-center" aria-label="Fil d'Ariane">
@@ -2083,7 +2114,8 @@
 
             const [product] = await Promise.all([
                 VoyageFiestaAPI.fetchProductBySlug(slug),
-                window.VFAgent?.prepare ? VFAgent.prepare('staff.json') : null
+                window.VFAgent?.prepare ? VFAgent.prepare('staff.json') : null,
+                loadOwnerDirectory()
             ]);
 
             if (product) {
@@ -2094,6 +2126,7 @@
                     window.VoyageFiestaEmbed.notifyParentHeight();
                 }
             } else {
+                renderProductOwnerContact(null);
                 document.getElementById('not-found').classList.remove('hidden');
                 document.querySelector('.product-countdown-bar')?.classList.add('hidden');
             }
