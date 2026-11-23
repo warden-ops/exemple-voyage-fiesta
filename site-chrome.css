@@ -41,6 +41,81 @@
   border-radius: 8px;
   background: #fff;
 }
+/* Advisor strip. Never use data-anim: iframes used to leave those blocks at opacity 0. */
+.vf-shop-agent {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 1rem auto;
+  display: grid;
+  gap: 0.35rem 1.75rem;
+  align-items: center;
+  background: #fff;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+  border-top: 3px solid #f26522;
+  border-radius: 14px;
+  padding: 0.85rem 1.1rem 0.95rem;
+  box-shadow: 0 12px 32px rgba(2, 40, 80, 0.08);
+  font-family: Poppins, sans-serif;
+  opacity: 1;
+  transform: none;
+}
+.vf-shop-agent__kicker {
+  margin: 0;
+  color: #025091;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.vf-shop-agent__name {
+  margin: 0.15rem 0 0;
+  color: #025091;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.vf-shop-agent__contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.vf-shop-agent__page { margin: 0.15rem 0 0; }
+.vf-shop-agent__contacts a,
+.vf-shop-agent__page a {
+  color: #025091;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  overflow-wrap: anywhere;
+}
+.vf-shop-agent__contacts a:hover,
+.vf-shop-agent__page a:hover { color: #9a3412; }
+.vf-shop-agent__contacts a:focus-visible,
+.vf-shop-agent__page a:focus-visible {
+  outline: 2px solid #025091;
+  outline-offset: 3px;
+}
+#vf-agent-contact:empty { display: none; }
+html.embed-mode .vf-shop-agent,
+html.embed .vf-shop-agent { opacity: 1; transform: none; }
+@media (min-width: 720px) {
+  .vf-shop-agent { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); }
+  .vf-shop-agent__contacts { flex-direction: row; flex-wrap: wrap; gap: 0 1.25rem; margin-top: 0; }
+  .vf-shop-agent__page { margin-top: 0; }
+}
+@media (forced-colors: active) {
+  .vf-shop-agent { border: 1px solid CanvasText; background: Canvas; color: CanvasText; box-shadow: none; }
+  .vf-shop-agent__kicker,
+  .vf-shop-agent__name,
+  .vf-shop-agent__contacts a,
+  .vf-shop-agent__page a { color: CanvasText; }
+}
 .vf-home-hero {
   position: relative;
   color: #fff;

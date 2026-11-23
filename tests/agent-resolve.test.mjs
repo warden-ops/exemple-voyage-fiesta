@@ -67,6 +67,77 @@ test('card shows the initial or the photo, and the contact button uses the first
   assert.equal(api.cardHtml(null), '');
 });
 
+test('boutique contact block shows the resolved advisor, with a page link', () => {
+  const api = load('?ref=eric-lacasse&ghl_user=userEric1234');
+  const html = api.shopContactHtml(api.resolve(staff, api.readHint()));
+  assert.match(html, /Votre conseiller\(ère\)/);
+  assert.match(html, /vf-shop-agent__name">Éric Lacasse</);
+  assert.match(html, /href="tel:\+15145550100"/);
+  assert.match(html, />\+15145550100</);
+  assert.match(html, /href="mailto:eric@voyagefiesta.com"/);
+  assert.match(html, /href="\/agents\/eric-lacasse\/"/);
+  assert.match(html, />Page d'Éric Lacasse</);
+  assert.doesNotMatch(html, /data-anim/);
+  assert.doesNotMatch(html, /[—–]|[\u{1F300}-\u{1FAFF}]/u);
+});
+
+test('boutique contact block is absent when no advisor is resolved', () => {
+  const api = load('?agent=yancie-auclair');
+  assert.equal(api.readHint().ref, '');
+  assert.equal(api.readHint().ghlUser, '');
+  assert.equal(api.shopContactHtml(api.resolve(staff, api.readHint())), '');
+  assert.equal(api.shopContactHtml(null), '');
+  assert.equal(api.shopContactHtml({ name: 'Sans fiche' }), '');
+});
+
+test('boutique contact block omits a missing phone or email', () => {
+  const api = load();
+  const phoneOnly = api.shopContactHtml({
+    id: 'userKevin123',
+    slug: 'kevin-watier',
+    name: 'Kevin Watier',
+    email: '',
+    phone: ''
+  });
+  assert.match(phoneOnly, /Kevin Watier/);
+  assert.match(phoneOnly, /href="\/agents\/kevin-watier\/"/);
+  assert.doesNotMatch(phoneOnly, /tel:|mailto:|vf-shop-agent__contacts/);
+
+  const emailOnly = api.shopContactHtml(api.resolve(staff, { ghlUser: 'userKevin123', ref: '' }));
+  assert.match(emailOnly, /href="mailto:kevin@voyagefiesta.com"/);
+  assert.doesNotMatch(emailOnly, /tel:/);
+
+  const unsafe = api.shopContactHtml({
+    id: 'userEric1234',
+    slug: 'eric-lacasse',
+    name: 'A <b> & "c"',
+    email: 'not an email',
+    phone: 'appel'
+  });
+  assert.match(unsafe, /A &lt;b&gt; &amp; &quot;c&quot;/);
+  assert.doesNotMatch(unsafe, /tel:|mailto:/);
+});
+
+test('a stored advisor still fills the boutique contact block', () => {
+  const api = load('', { ref: 'patrick-girard-lbhu', ghl_user: 'patrickLbh01' });
+  const html = api.shopContactHtml(api.resolve(staff, api.readHint('')));
+  assert.match(html, /Patrick Girard/);
+  assert.match(html, /href="\/agents\/patrick-girard-lbhu\/"/);
+  assert.match(html, />Page de Patrick Girard</);
+  assert.match(html, /href="mailto:p2@voyagefiesta.com"/);
+});
+
+test('the listing mounts the contact block above the hero and only from the shared advisor', () => {
+  const index = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const contactAt = index.indexOf('id="vf-agent-contact"');
+  const heroAt = index.indexOf('class="vf-home-hero"');
+  assert.ok(contactAt > 0 && heroAt > contactAt);
+  assert.match(index, /VFAgent\.prepare\('staff\.json'\)/);
+  assert.match(index, /VFAgent\.shopContactHtml\(agent\)/);
+  assert.match(index, /VFAgent\.current\(\)/);
+  assert.doesNotMatch(index, /agent-boutique-header|data-anim="[^"]*"[\s\S]{0,80}vf-shop-agent|id="vf-agent-contact"[^>]*data-anim/);
+});
+
 test('share URL keeps the resolved advisor and drops an unknown one', () => {
   const api = load();
   const agent = api.resolve(staff, { ghlUser: 'userKevin123', ref: 'kevin-watier' });
