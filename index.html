@@ -224,7 +224,7 @@
         html.embed-mode #products-container .text-xl { font-size: 1.35rem; }
         html.embed-mode #result-count { font-size: 1.1em; }
     </style>
-    <link rel="stylesheet" href="site-chrome.css?v=3">
+    <link rel="stylesheet" href="site-chrome.css?v=4">
     <script src="embed.js?v=5"></script>
 </head>
 <body class="bg-brand-light text-gray-800 font-sans flex flex-col min-h-screen">
@@ -240,6 +240,7 @@
     </header>
 
     <header class="vf-site-header" id="vf-site-header"></header>
+    <div id="vf-agent-contact"></div>
     <section class="vf-home-hero">
         <div class="vf-home-hero__grid">
             <div>
@@ -272,12 +273,6 @@
                 <i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Retour aux promotions</span>
             </a>
         </nav>
-
-        <div id="agent-boutique-header" class="hidden mb-6 rounded-lg border border-brand-blue/15 bg-white px-4 py-3.5 shadow-sm" role="region" aria-label="Conseiller">
-            <p class="text-xs font-semibold uppercase tracking-wide text-brand-orange m-0 mb-1">Votre conseiller</p>
-            <p id="agent-boutique-name" class="text-lg sm:text-xl font-bold text-brand-blue m-0"></p>
-            <p id="agent-boutique-contact" class="text-sm text-gray-600 m-0 mt-1.5 flex flex-wrap gap-x-4 gap-y-1"></p>
-        </div>
 
         <div class="flex flex-col gap-5">
         <aside id="filters-sidebar" class="filters-sidebar w-full bg-white rounded-lg shadow-md p-3.5 h-fit" data-open="true">
@@ -363,7 +358,7 @@
     <script src="/lead-ref.js?v=1"></script>
     <script src="site-chrome.js?v=3"></script>
     <script src="home-sections.js?v=3"></script>
-    <script src="/agent-resolve.js?v=1"></script>
+    <script src="/agent-resolve.js?v=2"></script>
     <script src="config.js?v=57"></script>
     <script src="api.js?v=109"></script>
     <script>
@@ -819,64 +814,43 @@
             });
         }
 
-        async function renderAgentBoutiqueHeader(agentKey, listedProducts) {
-            const wrap = document.getElementById('agent-boutique-header');
-            const nameEl = document.getElementById('agent-boutique-name');
-            const contactEl = document.getElementById('agent-boutique-contact');
-            if (!wrap || !nameEl || !contactEl) return;
-
-            if (!agentKey) {
-                wrap.classList.add('hidden');
-                nameEl.textContent = '';
-                contactEl.innerHTML = '';
-                const backNav = document.getElementById('listing-back-nav');
-                if (backNav) backNav.classList.add('hidden');
-                return;
-            }
-
+        function renderListingBackNav(agentKey) {
             const backNav = document.getElementById('listing-back-nav');
-            if (backNav) backNav.classList.remove('hidden');
+            if (!backNav) return;
+            backNav.classList.toggle('hidden', !agentKey);
+        }
 
-            const agents = await VoyageFiestaAPI.fetchAgents();
-            const profile = VoyageFiestaAPI.findAgentProfile(agents, agentKey)
-                || VoyageFiestaAPI.resolveAgentFromProducts(listedProducts, agentKey);
-
-            if (!profile || !profile.name) {
-                wrap.classList.add('hidden');
-                return;
+        function renderVisitorAgentContact() {
+            const slot = document.getElementById('vf-agent-contact');
+            if (!slot || !window.VFAgent || typeof VFAgent.shopContactHtml !== 'function') return;
+            const agent = typeof VFAgent.current === 'function' ? VFAgent.current() : null;
+            slot.innerHTML = VFAgent.shopContactHtml(agent);
+            if (window.VoyageFiestaEmbed && typeof VoyageFiestaEmbed.patchLinks === 'function') {
+                VoyageFiestaEmbed.patchLinks(slot);
             }
-
-            nameEl.textContent = profile.name;
-            const bits = [];
-            if (profile.phone) {
-                bits.push(`<a class="text-brand-blue hover:underline" href="tel:${escapeHtml(profile.phone)}">${escapeHtml(profile.phone)}</a>`);
+            if (window.VoyageFiestaEmbed && typeof VoyageFiestaEmbed.notifyParentHeight === 'function') {
+                VoyageFiestaEmbed.notifyParentHeight();
             }
-            if (profile.email) {
-                bits.push(`<a class="text-brand-blue hover:underline" href="mailto:${escapeHtml(profile.email)}">${escapeHtml(profile.email)}</a>`);
-            }
-            contactEl.innerHTML = bits.join('');
-            wrap.classList.remove('hidden');
         }
 
         async function init() {
+            const agentReady = window.VFAgent?.prepare ? VFAgent.prepare('staff.json') : Promise.resolve(null);
+            agentReady.then(renderVisitorAgentContact, renderVisitorAgentContact);
+
             if (!window.VoyageFiestaAPI || typeof VoyageFiestaAPI.fetchProducts !== 'function') {
                 document.getElementById('loading-state').classList.add('hidden');
                 document.getElementById('error-state').classList.remove('hidden');
                 return;
             }
+            const agentKey = VoyageFiestaAPI.getAgentQueryParam();
+            renderListingBackNav(agentKey);
             VoyageFiestaAPI.applySocialMetaTags(VoyageFiestaAPI.buildListingSharePayload());
             buildFilterUI();
             document.getElementById('loading-state').classList.remove('hidden');
             document.getElementById('empty-state').classList.add('hidden');
             document.getElementById('error-state').classList.add('hidden');
             try {
-                const agentKey = VoyageFiestaAPI.getAgentQueryParam();
-                const loaded = await Promise.all([
-                    VoyageFiestaAPI.fetchProducts({ agent: agentKey }),
-                    window.VFAgent?.prepare ? VFAgent.prepare('staff.json') : null
-                ]);
-                products = loaded[0];
-                await renderAgentBoutiqueHeader(agentKey, products);
+                products = await VoyageFiestaAPI.fetchProducts({ agent: agentKey });
                 buildDestinationFilter(products);
                 buildSupplierFilter(products);
                 buildDepartureDateFilter(products);

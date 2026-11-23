@@ -6,6 +6,7 @@
  *   VFAgent.current()        matched staff profile or null
  *   VFAgent.resolve(list, hint)
  *   VFAgent.cardHtml(agent, { voyage })
+ *   VFAgent.shopContactHtml(agent)  boutique strip, or '' when no advisor
  *   VFAgent.shareUrl(url, agent, utm)
  */
 (function (global) {
@@ -112,6 +113,50 @@
         return chars.length ? chars[0].toLocaleUpperCase('fr-CA') : '?';
     }
 
+    function telHref(phone) {
+        var raw = String(phone || '').trim();
+        if (!raw) return '';
+        var tel = raw.replace(/[^\d+]/g, '');
+        return /^\+?\d{6,20}$/.test(tel) ? tel : '';
+    }
+
+    function mailHref(email) {
+        var raw = String(email || '').trim();
+        return /^[^\s"'<>]+@[^\s"'<>]+\.[^\s"'<>]+$/.test(raw) ? raw : '';
+    }
+
+    /**
+     * Contact strip for the Aubaines Express listing (master and ?agent=).
+     * Empty when the shared link did not resolve an advisor: no shell, no fallback.
+     * Phone and email lines are omitted when that field is missing.
+     */
+    function shopContactHtml(agent) {
+        var person = profile(agent);
+        if (!person || !person.name || !person.slug) return '';
+        var lines = '';
+        var tel = telHref(person.phone);
+        if (tel) {
+            lines += '<li><a href="tel:' + esc(tel) + '">' + esc(person.phone.trim()) + '</a></li>';
+        }
+        var mail = mailHref(person.email);
+        if (mail) {
+            lines += '<li><a href="mailto:' + esc(mail) + '">' + esc(person.email.trim()) + '</a></li>';
+        }
+        var contacts = lines ? '<ul class="vf-shop-agent__contacts">' + lines + '</ul>' : '';
+        var first = Array.from(person.name)[0] || '';
+        var de = /^[aeiouyàâäéèêëîïôöùûüœ]/i.test(first) ? "d'" : 'de ';
+        return '<section class="vf-shop-agent" aria-labelledby="vf-shop-agent-title">'
+            + '<div class="vf-shop-agent__who">'
+            + '<p id="vf-shop-agent-title" class="vf-shop-agent__kicker">Votre conseiller(ère)</p>'
+            + '<p class="vf-shop-agent__name">' + esc(person.name) + '</p>'
+            + '</div>'
+            + '<div class="vf-shop-agent__reach">'
+            + contacts
+            + '<p class="vf-shop-agent__page"><a href="/agents/' + encodeURIComponent(person.slug) + '/">Page ' + de + esc(person.name) + '</a></p>'
+            + '</div>'
+            + '</section>';
+    }
+
     function cardHtml(agent, options) {
         var person = profile(agent);
         if (!person || !person.name) return '';
@@ -201,6 +246,7 @@
         firstName: firstName,
         initial: initial,
         cardHtml: cardHtml,
+        shopContactHtml: shopContactHtml,
         shareUrl: shareUrl,
         current: current,
         prepare: prepare,
