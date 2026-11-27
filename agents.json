@@ -1,21 +1,21 @@
 {
-  "updatedAt": "2026-11-27T19:00:04.088Z",
+  "updatedAt": "2026-11-27T19:15:03.570Z",
   "source": "ghl",
   "locationId": "V90iyFBbBrCg3tpctRjc",
   "agents": [
+    {
+      "id": "M37kX9dOKDqiT8arwEJs",
+      "name": "Agence Voyages Fiesta  et Mariage Sud",
+      "email": "info@promo.voyagefiesta.com",
+      "phone": "+15148566614",
+      "slug": "agence-voyages-fiesta-et-mariage-sud"
+    },
     {
       "id": "0nvsiaLmrxoziqCY1cOY",
       "name": "Barbara Delisle",
       "email": "Barbara@voyagefiesta.com",
       "phone": "+18736712155",
       "slug": "barbara-delisle"
-    },
-    {
-      "id": "M37kX9dOKDqiT8arwEJs",
-      "name": "M37kX9dOKDqiT8arwEJs",
-      "email": "",
-      "phone": "",
-      "slug": "m37kx9dokdqit8arwejs"
     },
     {
       "id": "2k9aRsh2OkTdG7TnIiGo",
